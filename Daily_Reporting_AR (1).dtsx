@@ -1,0 +1,1615 @@
+﻿<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="9/23/2020 2:31:08 PM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorComputerName="9LDZL13"
+  DTS:CreatorName="FACT\michelle.rutz"
+  DTS:DTSID="{3FAE8A5F-9DF6-4452-A028-CC25B1BA8ADA}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="15.0.2000.123"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="Package"
+  DTS:PackageType="5"
+  DTS:VersionBuild="11"
+  DTS:VersionGUID="{31D31944-0C67-440B-A396-FB1703E3B0B8}">
+  <DTS:Property
+    DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager
+      DTS:refId="Package.ConnectionManagers[SMTP Connection Manager]"
+      DTS:CreationName="SMTP"
+      DTS:DTSID="{84BFF4B7-9437-4EA6-B690-B3413462C714}"
+      DTS:ObjectName="SMTP Connection Manager">
+      <DTS:ObjectData>
+        <SmtpConnectionManager
+          ConnectionString="SmtpServer=10.1.110.46;UseWindowsAuthentication=False;EnableSsl=False;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Variables />
+  <DTS:Executables>
+    <DTS:Executable
+      DTS:refId="Package\Data Flow Task"
+      DTS:CreationName="Microsoft.Pipeline"
+      DTS:Description="Data Flow Task"
+      DTS:DTSID="{A83D1FC1-96D3-4D2A-A2A9-C16AF9CCF2CB}"
+      DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Data Flow Task"
+      DTS:TaskContact="Performs high-performance data extraction, transformation and loading;Microsoft Corporation; Microsoft SQL Server; (C) Microsoft Corporation; All Rights Reserved;http://www.microsoft.com/sql/support/default.asp;1">
+      <DTS:Variables />
+      <DTS:ObjectData>
+        <pipeline
+          version="1">
+          <components>
+            <component
+              refId="Package\Data Flow Task\AR_summary_raw"
+              componentClassID="Microsoft.OLEDBSource"
+              contactInfo="OLE DB Source;Microsoft Corporation; Microsoft SQL Server; (C) Microsoft Corporation; All Rights Reserved; http://www.microsoft.com/sql/support;7"
+              description="OLE DB Source"
+              name="AR_summary_raw"
+              usesDispositions="true"
+              version="7">
+              <properties>
+                <property
+                  dataType="System.Int32"
+                  description="The number of seconds before a command times out.  A value of 0 indicates an infinite time-out."
+                  name="CommandTimeout">0</property>
+                <property
+                  dataType="System.String"
+                  description="Specifies the name of the database object used to open a rowset."
+                  name="OpenRowset"></property>
+                <property
+                  dataType="System.String"
+                  description="Specifies the variable that contains the name of the database object used to open a rowset."
+                  name="OpenRowsetVariable"></property>
+                <property
+                  dataType="System.String"
+                  description="The SQL command to be executed."
+                  name="SqlCommand"
+                  UITypeEditor="Microsoft.DataTransformationServices.Controls.ModalMultilineStringEditor">---- AR SNAPSHOT RAW SQL -----updated 10/09/2020 to accommodate AR Daily Reporting----
+SELECT
+	CAST('Transportation' as nvarchar) AS business_unit
+	,client.id AS client_id
+	,CAST(ent.number as nvarchar) AS client_number
+	,CAST(ent.name as nvarchar) AS client_name
+	,clt.State as Client_State
+	,clt.ZipCode as Client_ZIP
+	,debtor.id AS debtor_id
+	,CAST(d_ent.number as nvarchar) AS debtor_number
+	,CAST(d_ent.name as nvarchar) AS debtor_name
+	,dbt.State as Debtor_State
+	,dbt.ZipCode as Debtor_ZIP
+	,inv.invno as invoice_number
+	,inv.TransPostDate transpostdate
+	,inv.daysdue AS Days_Due
+	,inv.amt as invoice_amount
+	,inv.balance as invoice_balance
+	,DATEDIFF(day,inv.InvDate,CURRENT_TIMESTAMP) as Days_Outstanding
+	,CAST(inv.Explanation as nvarchar) AS explaination
+	,DATEDIFF(day,inv.TransPostDate,CURRENT_TIMESTAMP) as age
+	,CASE WHEN inv.DebtorKey IN (11352,30273) THEN 'ADVANCE' ELSE 'INVOICE' END type
+	,CURRENT_TIMESTAMP as row_created_date
+	,CAST(CURRENT_TIMESTAMP as date) AS date
+	,CAST(CASE
+		WHEN DATEDIFF(day,inv.TransPostDate,CURRENT_TIMESTAMP) &lt;= 30 THEN '&lt;=30'
+		WHEN DATEDIFF(day,inv.TransPostDate,CURRENT_TIMESTAMP) &lt;= 60 THEN '31-60'
+		WHEN DATEDIFF(day,inv.TransPostDate,CURRENT_TIMESTAMP) &lt;= 90 THEN '61-90'
+		WHEN DATEDIFF(day,inv.TransPostDate,CURRENT_TIMESTAMP) &lt;= 120 THEN '91-120'
+		WHEN DATEDIFF(day,inv.TransPostDate,CURRENT_TIMESTAMP) &gt; 120 THEN '121+'
+	END as nvarchar) AS ar_bucket
+	,client.row_source_system
+
+FROM CadenceReplica.dbo.Invoices (nolock) inv
+	INNER JOIN CadenceReplica.dbo.Clients clt (nolock) on inv.clientkey = clt.clientkey
+	INNER JOIN CadenceReplica.dbo.Debtors dbt (nolock) on inv.debtorkey = dbt.debtorkey
+	INNER JOIN dbo.client ON clt.clientkey = client.row_source_system_key
+		AND client.row_source_system = 'Cadence'
+	INNER JOIN dbo.entity ent ON client.entity_id = ent.id
+	INNER JOIN dbo.debtor ON dbt.DebtorKey = debtor.row_source_system_key
+		AND debtor.row_source_system = 'Cadence'
+	INNER JOIN dbo.entity d_ent ON debtor.entity_id = d_ent.id
+
+WHERE
+	inv.balance &lt;&gt; 0
+	AND inv.amt &lt;&gt; 0
+	AND inv.BuyStatus = 3
+	and clt.ClientKey &lt;&gt; 10704
+	and clt.office = 'TBSFACTORING'
+
+UNION ALL
+
+SELECT
+	CAST('Capital Funding' as nvarchar) AS business_unit
+	,cli.id AS client_id
+	,CAST(c_entity.number as nvarchar) AS client_number
+	,CAST(c_entity.name as nvarchar) AS client_name
+	,cli.physical_state AS client_state
+	,cli.physical_zip AS client_zip
+	,dbt.id AS debtor_id
+	,CAST(ent.number as nvarchar) AS debtor_number
+	,CAST(ent.name as nvarchar) AS debtor_name
+	,dbt.mailing_state AS debtor_state
+	,dbt.mailing_zip AS debtor_zip
+	,i.tranid invoice_number
+	,i.trandate transpostdate
+	,DATEDIFF(day,getdate(),duedate) as days_due
+	,foreigntotal inovice_amount
+	,foreignamountunpaid invoice_balance
+	,datediff(day,i.trandate,CURRENT_TIMESTAMP) AS days_outstanding
+	,CAST(i.memo as nvarchar) AS explaination
+	,datediff(day,i.trandate,CURRENT_TIMESTAMP) age
+	,CASE WHEN cli.id = dbt.id THEN 'ADVANCE' ELSE 'INVOICE' END type
+	,CURRENT_TIMESTAMP as row_created_date
+	,CAST(CURRENT_TIMESTAMP as date) AS date
+	,CAST(CASE
+		WHEN DATEDIFF(day,i.TranDate,CURRENT_TIMESTAMP) &lt;= 30 THEN '&lt;=30'
+		WHEN DATEDIFF(day,i.TranDate,CURRENT_TIMESTAMP) &lt;= 60 THEN '31-60'
+		WHEN DATEDIFF(day,i.TranDate,CURRENT_TIMESTAMP) &lt;= 90 THEN '61-90'
+		WHEN DATEDIFF(day,i.TranDate,CURRENT_TIMESTAMP) &lt;= 120 THEN '91-120'
+		WHEN DATEDIFF(day,i.TranDate,CURRENT_TIMESTAMP) &gt; 120 THEN '121+'
+	END as nvarchar) AS ar_bucket
+	,cli.row_source_system
+
+FROM netsuite.invoice i
+	 inner join netsuite.client c on i.custbody_client = c.id
+	 inner join dbo.Client cli on c.id = cli.row_source_system_key
+		AND cli.row_source_system = 'Netsuite'
+	INNER JOIN dbo.entity c_entity ON cli.entity_id = c_entity.id
+	 inner join netsuite.debtor d on i.entity = d.id
+	 inner join dbo.Debtor dbt on d.id = dbt.row_source_system_key
+		AND dbt.row_source_system = 'Netsuite'
+	INNER JOIN dbo.entity ent ON dbt.entity_id = ent.id
+
+WHERE foreignamountunpaid &lt;&gt; 0
+AND i.VOID = 'F';</property>
+                <property
+                  dataType="System.String"
+                  description="The variable that contains the SQL command to be executed."
+                  name="SqlCommandVariable"></property>
+                <property
+                  dataType="System.Int32"
+                  description="Specifies the column code page to use when code page information is unavailable from the data source."
+                  name="DefaultCodePage">1252</property>
+                <property
+                  dataType="System.Boolean"
+                  description="Forces the use of the DefaultCodePage property value when describing character data."
+                  name="AlwaysUseDefaultCodePage">false</property>
+                <property
+                  dataType="System.Int32"
+                  description="Specifies the mode used to access the database."
+                  name="AccessMode"
+                  typeConverter="AccessMode">2</property>
+                <property
+                  dataType="System.String"
+                  description="The mappings between the parameters in the SQL command and variables."
+                  name="ParameterMapping"></property>
+              </properties>
+              <connections>
+                <connection
+                  refId="Package\Data Flow Task\AR_summary_raw.Connections[OleDbConnection]"
+                  connectionManagerID="{177F80BE-2562-4EFC-B630-E432050892B5}:external"
+                  connectionManagerRefId="Project.ConnectionManagers[tbs-cl-rds-sql-01.choziwohin32.us-east-1.rds.amazonaws.com.EDWIntegration_DEV.michelle.rutz]"
+                  description="The OLE DB runtime connection used to access the database."
+                  name="OleDbConnection" />
+              </connections>
+              <outputs>
+                <output
+                  refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output]"
+                  name="OLE DB Source Output">
+                  <outputColumns>
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[business_unit]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[business_unit]"
+                      length="50"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[business_unit]"
+                      name="business_unit"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[client_number]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[client_number]"
+                      length="50"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[client_number]"
+                      name="client_number"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[client_name]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[client_name]"
+                      length="50"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[client_name]"
+                      name="client_name"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[debtor_number]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[debtor_number]"
+                      length="50"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[debtor_number]"
+                      name="debtor_number"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[debtor_name]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[debtor_name]"
+                      length="50"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[debtor_name]"
+                      name="debtor_name"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_number]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[invoice_number]"
+                      length="138"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_number]"
+                      name="invoice_number"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_date]"
+                      dataType="dbTimeStamp"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[transpostdate]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_date]"
+                      name="invoice_date"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_amount]"
+                      dataType="r8"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[invoice_amount]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_amount]"
+                      name="invoice_amount"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_balance]"
+                      dataType="r8"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[invoice_balance]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_balance]"
+                      name="invoice_balance"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[date]"
+                      dataType="dbDate"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[date]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[date]"
+                      name="date"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[ar_bucket]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[ar_bucket]"
+                      length="50"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[ar_bucket]"
+                      name="ar_bucket"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Client_State]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Client_State]"
+                      length="100"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Client_State]"
+                      name="Client_State"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Client_ZIP]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Client_ZIP]"
+                      length="100"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Client_ZIP]"
+                      name="Client_ZIP"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Debtor_State]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Debtor_State]"
+                      length="100"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Debtor_State]"
+                      name="Debtor_State"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Debtor_ZIP]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Debtor_ZIP]"
+                      length="100"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Debtor_ZIP]"
+                      name="Debtor_ZIP"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Days_Due]"
+                      dataType="i4"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Days_Due]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Days_Due]"
+                      name="Days_Due"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Days_Outstanding]"
+                      dataType="i4"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Days_Outstanding]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Days_Outstanding]"
+                      name="Days_Outstanding"
+                      truncationRowDisposition="FailComponent" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[explaination]"
+                      dataType="wstr"
+                      errorOrTruncationOperation="Conversion"
+                      errorRowDisposition="FailComponent"
+                      externalMetadataColumnId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[explaination]"
+                      length="30"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[explaination]"
+                      name="explaination"
+                      truncationRowDisposition="FailComponent" />
+                  </outputColumns>
+                  <externalMetadataColumns
+                    isUsed="True">
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[business_unit]"
+                      dataType="wstr"
+                      length="30"
+                      name="business_unit" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[client_id]"
+                      dataType="i4"
+                      name="client_id" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[client_number]"
+                      dataType="wstr"
+                      length="30"
+                      name="client_number" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[client_name]"
+                      dataType="wstr"
+                      length="30"
+                      name="client_name" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[debtor_id]"
+                      dataType="i4"
+                      name="debtor_id" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[debtor_number]"
+                      dataType="wstr"
+                      length="30"
+                      name="debtor_number" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[debtor_name]"
+                      dataType="wstr"
+                      length="30"
+                      name="debtor_name" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[invoice_number]"
+                      dataType="wstr"
+                      length="138"
+                      name="invoice_number" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[transpostdate]"
+                      dataType="dbTimeStamp"
+                      name="transpostdate" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[invoice_amount]"
+                      dataType="r8"
+                      name="invoice_amount" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[invoice_balance]"
+                      dataType="r8"
+                      name="invoice_balance" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[age]"
+                      dataType="i4"
+                      name="age" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[type]"
+                      codePage="1252"
+                      dataType="str"
+                      length="7"
+                      name="type" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[row_created_date]"
+                      dataType="dbTimeStamp"
+                      name="row_created_date" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[date]"
+                      dataType="dbDate"
+                      name="date" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[ar_bucket]"
+                      dataType="wstr"
+                      length="30"
+                      name="ar_bucket" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[row_source_system]"
+                      codePage="1252"
+                      dataType="str"
+                      length="100"
+                      name="row_source_system" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Client_State]"
+                      dataType="wstr"
+                      length="100"
+                      name="Client_State" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Client_ZIP]"
+                      dataType="wstr"
+                      length="100"
+                      name="Client_ZIP" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Debtor_State]"
+                      dataType="wstr"
+                      length="100"
+                      name="Debtor_State" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Debtor_ZIP]"
+                      dataType="wstr"
+                      length="100"
+                      name="Debtor_ZIP" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Days_Due]"
+                      dataType="i4"
+                      name="Days_Due" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[Days_Outstanding]"
+                      dataType="i4"
+                      name="Days_Outstanding" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].ExternalColumns[explaination]"
+                      dataType="wstr"
+                      length="30"
+                      name="explaination" />
+                  </externalMetadataColumns>
+                </output>
+                <output
+                  refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output]"
+                  isErrorOut="true"
+                  name="OLE DB Source Error Output">
+                  <outputColumns>
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[business_unit]"
+                      dataType="wstr"
+                      length="30"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[business_unit]"
+                      name="business_unit" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[client_number]"
+                      dataType="wstr"
+                      length="30"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[client_number]"
+                      name="client_number" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[client_name]"
+                      dataType="wstr"
+                      length="30"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[client_name]"
+                      name="client_name" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[debtor_number]"
+                      dataType="wstr"
+                      length="30"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[debtor_number]"
+                      name="debtor_number" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Client_State]"
+                      dataType="wstr"
+                      length="100"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Client_State]"
+                      name="Client_State" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Client_ZIP]"
+                      dataType="wstr"
+                      length="100"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Client_ZIP]"
+                      name="Client_ZIP" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[debtor_name]"
+                      dataType="wstr"
+                      length="30"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[debtor_name]"
+                      name="debtor_name" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[invoice_number]"
+                      dataType="wstr"
+                      length="138"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[invoice_number]"
+                      name="invoice_number" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[transpostdate]"
+                      dataType="dbTimeStamp"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[transpostdate]"
+                      name="transpostdate" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Debtor_State]"
+                      dataType="wstr"
+                      length="100"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Debtor_State]"
+                      name="Debtor_State" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Debtor_ZIP]"
+                      dataType="wstr"
+                      length="100"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Debtor_ZIP]"
+                      name="Debtor_ZIP" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[invoice_amount]"
+                      dataType="r8"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[invoice_amount]"
+                      name="invoice_amount" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[invoice_balance]"
+                      dataType="r8"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[invoice_balance]"
+                      name="invoice_balance" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Days_Due]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Days_Due]"
+                      name="Days_Due" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[date]"
+                      dataType="dbDate"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[date]"
+                      name="date" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[ar_bucket]"
+                      dataType="wstr"
+                      length="30"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[ar_bucket]"
+                      name="ar_bucket" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Days_Outstanding]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[Days_Outstanding]"
+                      name="Days_Outstanding" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[explaination]"
+                      dataType="wstr"
+                      length="30"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[explaination]"
+                      name="explaination" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[ErrorCode]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[ErrorCode]"
+                      name="ErrorCode"
+                      specialFlags="1" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Error Output].Columns[ErrorColumn]"
+                      name="ErrorColumn"
+                      specialFlags="2" />
+                  </outputColumns>
+                  <externalMetadataColumns />
+                </output>
+              </outputs>
+            </component>
+            <component
+              refId="Package\Data Flow Task\Capital Funding data"
+              componentClassID="Microsoft.ExcelDestination"
+              contactInfo="Excel Destination;Microsoft Corporation; Microsoft SQL Server; (C) Microsoft Corporation; All Rights Reserved; http://www.microsoft.com/sql/support;0"
+              description="Excel Destination"
+              name="Capital Funding data"
+              usesDispositions="true">
+              <properties>
+                <property
+                  dataType="System.Int32"
+                  description="The number of seconds before a command times out.  A value of 0 indicates an infinite time-out."
+                  name="CommandTimeout">0</property>
+                <property
+                  dataType="System.String"
+                  description="Specifies the name of the database object used to open a rowset."
+                  name="OpenRowset">'Capital Funding data$'</property>
+                <property
+                  dataType="System.String"
+                  description="Specifies the variable that contains the name of the database object used to open a rowset."
+                  name="OpenRowsetVariable"></property>
+                <property
+                  dataType="System.String"
+                  description="The SQL command to be executed."
+                  name="SqlCommand"
+                  UITypeEditor="Microsoft.DataTransformationServices.Controls.ModalMultilineStringEditor"></property>
+                <property
+                  dataType="System.Int32"
+                  description="Specifies the mode used to access the database."
+                  name="AccessMode"
+                  typeConverter="AccessMode">0</property>
+                <property
+                  dataType="System.Boolean"
+                  description="Indicates whether the values supplied for identity columns will be copied to the destination. If false, values for identity columns will be auto-generated at the destination. Applies only if fast load is turned on."
+                  name="FastLoadKeepIdentity">false</property>
+                <property
+                  dataType="System.Boolean"
+                  description="Indicates whether the columns containing null will have null inserted in the destination. If false, columns containing null will have their default values inserted at the destination. Applies only if fast load is turned on."
+                  name="FastLoadKeepNulls">false</property>
+                <property
+                  dataType="System.String"
+                  description="Specifies options to be used with fast load.  Applies only if fast load is turned on."
+                  name="FastLoadOptions"></property>
+                <property
+                  dataType="System.Int32"
+                  description="Specifies when commits are issued during data insertion.  A value of 0 specifies that one commit will be issued at the end of data insertion.  Applies only if fast load is turned on."
+                  name="FastLoadMaxInsertCommitSize">2147483647</property>
+              </properties>
+              <connections>
+                <connection
+                  refId="Package\Data Flow Task\Capital Funding data.Connections[OleDbConnection]"
+                  connectionManagerID="{F7199933-07ED-43D8-9977-C6DD95A6DF4E}:external"
+                  connectionManagerRefId="Project.ConnectionManagers[Excel Connection Manager]"
+                  description="The OLE DB runtime connection used to access the database."
+                  name="OleDbConnection" />
+              </connections>
+              <inputs>
+                <input
+                  refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input]"
+                  errorOrTruncationOperation="Insert"
+                  errorRowDisposition="FailComponent"
+                  hasSideEffects="true"
+                  name="Excel Destination Input">
+                  <inputColumns>
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[business_unit]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="business_unit"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[business_unit]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[business_unit]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[client_number]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="client_number"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[client_number]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[client_number]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[client_name]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="client_name"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[client_name]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[client_name]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[debtor_number]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="debtor_number"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[debtor_number]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[debtor_number]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[debtor_name]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="debtor_name"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[debtor_name]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[debtor_name]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[invoice_number]"
+                      cachedDataType="wstr"
+                      cachedLength="138"
+                      cachedName="invoice_number"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[invoice_number]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_number]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[invoice_date]"
+                      cachedDataType="dbTimeStamp"
+                      cachedName="invoice_date"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[invoice_date]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_date]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[invoice_amount]"
+                      cachedDataType="r8"
+                      cachedName="invoice_amount"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[invoice_amount]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_amount]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[invoice_balance]"
+                      cachedDataType="r8"
+                      cachedName="invoice_balance"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[invoice_balance]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_balance]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[date]"
+                      cachedDataType="dbDate"
+                      cachedName="date"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[date]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[date]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[ar_bucket]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="ar_bucket"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[ar_bucket]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[ar_bucket]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[explaination]"
+                      cachedDataType="wstr"
+                      cachedLength="30"
+                      cachedName="explaination"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[explaination]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[explaination]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[Client_State]"
+                      cachedDataType="wstr"
+                      cachedLength="100"
+                      cachedName="Client_State"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Client_State]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Client_State]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[Client_ZIP]"
+                      cachedDataType="wstr"
+                      cachedLength="100"
+                      cachedName="Client_ZIP"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Client_ZIP]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Client_ZIP]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[Debtor_State]"
+                      cachedDataType="wstr"
+                      cachedLength="100"
+                      cachedName="Debtor_State"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Debtor_State]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Debtor_State]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[Debtor_ZIP]"
+                      cachedDataType="wstr"
+                      cachedLength="100"
+                      cachedName="Debtor_ZIP"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Debtor_ZIP]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Debtor_ZIP]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[Days_Due]"
+                      cachedDataType="i4"
+                      cachedName="Days_Due"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Days_Due]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Days_Due]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].Columns[Days_Outstanding]"
+                      cachedDataType="i4"
+                      cachedName="Days_Outstanding"
+                      externalMetadataColumnId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Days_Outstanding]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Days_Outstanding]" />
+                  </inputColumns>
+                  <externalMetadataColumns
+                    isUsed="True">
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[business_unit]"
+                      dataType="wstr"
+                      length="255"
+                      name="business_unit" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[client_number]"
+                      dataType="wstr"
+                      length="255"
+                      name="client_number" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[client_name]"
+                      dataType="wstr"
+                      length="255"
+                      name="client_name" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[debtor_number]"
+                      dataType="wstr"
+                      length="255"
+                      name="debtor_number" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[debtor_name]"
+                      dataType="wstr"
+                      length="255"
+                      name="debtor_name" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[invoice_number]"
+                      dataType="wstr"
+                      length="255"
+                      name="invoice_number" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[invoice_date]"
+                      dataType="wstr"
+                      length="255"
+                      name="invoice_date" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[invoice_amount]"
+                      dataType="wstr"
+                      length="255"
+                      name="invoice_amount" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[invoice_balance]"
+                      dataType="wstr"
+                      length="255"
+                      name="invoice_balance" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[explaination]"
+                      dataType="wstr"
+                      length="255"
+                      name="explaination" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[date]"
+                      dataType="wstr"
+                      length="255"
+                      name="date" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[ar_bucket]"
+                      dataType="wstr"
+                      length="255"
+                      name="ar_bucket" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Client_State]"
+                      dataType="wstr"
+                      length="255"
+                      name="Client_State" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Client_ZIP]"
+                      dataType="wstr"
+                      length="255"
+                      name="Client_ZIP" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Debtor_State]"
+                      dataType="wstr"
+                      length="255"
+                      name="Debtor_State" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Debtor_ZIP]"
+                      dataType="wstr"
+                      length="255"
+                      name="Debtor_ZIP" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Days_Due]"
+                      dataType="wstr"
+                      length="255"
+                      name="Days_Due" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input].ExternalColumns[Days_Outstanding]"
+                      dataType="wstr"
+                      length="255"
+                      name="Days_Outstanding" />
+                  </externalMetadataColumns>
+                </input>
+              </inputs>
+              <outputs>
+                <output
+                  refId="Package\Data Flow Task\Capital Funding data.Outputs[Excel Destination Error Output]"
+                  exclusionGroup="1"
+                  isErrorOut="true"
+                  name="Excel Destination Error Output"
+                  synchronousInputId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input]">
+                  <outputColumns>
+                    <outputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Outputs[Excel Destination Error Output].Columns[ErrorCode]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\Capital Funding data.Outputs[Excel Destination Error Output].Columns[ErrorCode]"
+                      name="ErrorCode"
+                      specialFlags="1" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\Capital Funding data.Outputs[Excel Destination Error Output].Columns[ErrorColumn]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\Capital Funding data.Outputs[Excel Destination Error Output].Columns[ErrorColumn]"
+                      name="ErrorColumn"
+                      specialFlags="2" />
+                  </outputColumns>
+                  <externalMetadataColumns />
+                </output>
+              </outputs>
+            </component>
+            <component
+              refId="Package\Data Flow Task\Conditional Split"
+              componentClassID="Microsoft.ConditionalSplit"
+              contactInfo="Conditional Split;Microsoft Corporation; Microsoft SQL Server; (C) Microsoft Corporation; All Rights Reserved; http://www.microsoft.com/sql/support;0"
+              description="Routes data rows to different outputs depending on the content of the data. Use conditions (SSIS expressions) to specify which rows are routed. For example, separate records that need to be cleaned from those that are ready to be loaded or route only a subset of records."
+              name="Conditional Split"
+              usesDispositions="true">
+              <inputs>
+                <input
+                  refId="Package\Data Flow Task\Conditional Split.Inputs[Conditional Split Input]"
+                  description="Input to the Conditional Split Transformation"
+                  name="Conditional Split Input">
+                  <inputColumns>
+                    <inputColumn
+                      refId="Package\Data Flow Task\Conditional Split.Inputs[Conditional Split Input].Columns[business_unit]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="business_unit"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[business_unit]" />
+                  </inputColumns>
+                  <externalMetadataColumns />
+                </input>
+              </inputs>
+              <outputs>
+                <output
+                  refId="Package\Data Flow Task\Conditional Split.Outputs[CapitalFunding]"
+                  description="Output 1 of the Conditional Split Transformation"
+                  errorOrTruncationOperation="Computation"
+                  errorRowDisposition="FailComponent"
+                  exclusionGroup="1"
+                  name="CapitalFunding"
+                  synchronousInputId="Package\Data Flow Task\Conditional Split.Inputs[Conditional Split Input]"
+                  truncationRowDisposition="FailComponent">
+                  <properties>
+                    <property
+                      containsID="true"
+                      dataType="System.String"
+                      description="Specifies the expression. This expression version uses lineage identifiers instead of column names."
+                      name="Expression">#{Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[business_unit]} == "TBSCAPFUND"</property>
+                    <property
+                      containsID="true"
+                      dataType="System.String"
+                      description="Specifies the friendly version of the expression. This expression version uses column names."
+                      expressionType="Notify"
+                      name="FriendlyExpression">business_unit == "TBSCAPFUND"</property>
+                    <property
+                      dataType="System.Int32"
+                      description="Specifies the position of the condition in the list of conditions that the transformation evaluates. The evaluation order is from the lowest to the highest value."
+                      name="EvaluationOrder">0</property>
+                  </properties>
+                  <externalMetadataColumns />
+                </output>
+                <output
+                  refId="Package\Data Flow Task\Conditional Split.Outputs[Factoring]"
+                  description="Output 2 of the Conditional Split Transformation"
+                  errorOrTruncationOperation="Computation"
+                  errorRowDisposition="FailComponent"
+                  exclusionGroup="1"
+                  name="Factoring"
+                  synchronousInputId="Package\Data Flow Task\Conditional Split.Inputs[Conditional Split Input]"
+                  truncationRowDisposition="FailComponent">
+                  <properties>
+                    <property
+                      containsID="true"
+                      dataType="System.String"
+                      description="Specifies the expression. This expression version uses lineage identifiers instead of column names."
+                      name="Expression">#{Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[business_unit]} == "TBSFACTORING"</property>
+                    <property
+                      containsID="true"
+                      dataType="System.String"
+                      description="Specifies the friendly version of the expression. This expression version uses column names."
+                      expressionType="Notify"
+                      name="FriendlyExpression">business_unit == "TBSFACTORING"</property>
+                    <property
+                      dataType="System.Int32"
+                      description="Specifies the position of the condition in the list of conditions that the transformation evaluates. The evaluation order is from the lowest to the highest value."
+                      name="EvaluationOrder">1</property>
+                  </properties>
+                  <externalMetadataColumns />
+                </output>
+                <output
+                  refId="Package\Data Flow Task\Conditional Split.Outputs[Conditional Split Default Output]"
+                  description="Default Output of the Conditional Split Transformation"
+                  exclusionGroup="1"
+                  name="Conditional Split Default Output"
+                  synchronousInputId="Package\Data Flow Task\Conditional Split.Inputs[Conditional Split Input]">
+                  <properties>
+                    <property
+                      dataType="System.Boolean"
+                      name="IsDefaultOut">true</property>
+                  </properties>
+                  <externalMetadataColumns />
+                </output>
+                <output
+                  refId="Package\Data Flow Task\Conditional Split.Outputs[Conditional Split Error Output]"
+                  description="Error Output of the Conditional Split Transformation"
+                  exclusionGroup="1"
+                  isErrorOut="true"
+                  name="Conditional Split Error Output"
+                  synchronousInputId="Package\Data Flow Task\Conditional Split.Inputs[Conditional Split Input]">
+                  <outputColumns>
+                    <outputColumn
+                      refId="Package\Data Flow Task\Conditional Split.Outputs[Conditional Split Error Output].Columns[ErrorCode]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\Conditional Split.Outputs[Conditional Split Error Output].Columns[ErrorCode]"
+                      name="ErrorCode"
+                      specialFlags="1" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\Conditional Split.Outputs[Conditional Split Error Output].Columns[ErrorColumn]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\Conditional Split.Outputs[Conditional Split Error Output].Columns[ErrorColumn]"
+                      name="ErrorColumn"
+                      specialFlags="2" />
+                  </outputColumns>
+                  <externalMetadataColumns />
+                </output>
+              </outputs>
+            </component>
+            <component
+              refId="Package\Data Flow Task\Factoring data"
+              componentClassID="Microsoft.ExcelDestination"
+              contactInfo="Excel Destination;Microsoft Corporation; Microsoft SQL Server; (C) Microsoft Corporation; All Rights Reserved; http://www.microsoft.com/sql/support;0"
+              description="Excel Destination"
+              name="Factoring data"
+              usesDispositions="true">
+              <properties>
+                <property
+                  dataType="System.Int32"
+                  description="The number of seconds before a command times out.  A value of 0 indicates an infinite time-out."
+                  name="CommandTimeout">0</property>
+                <property
+                  dataType="System.String"
+                  description="Specifies the name of the database object used to open a rowset."
+                  name="OpenRowset">'Factoring data$'</property>
+                <property
+                  dataType="System.String"
+                  description="Specifies the variable that contains the name of the database object used to open a rowset."
+                  name="OpenRowsetVariable"></property>
+                <property
+                  dataType="System.String"
+                  description="The SQL command to be executed."
+                  name="SqlCommand"
+                  UITypeEditor="Microsoft.DataTransformationServices.Controls.ModalMultilineStringEditor"></property>
+                <property
+                  dataType="System.Int32"
+                  description="Specifies the mode used to access the database."
+                  name="AccessMode"
+                  typeConverter="AccessMode">0</property>
+                <property
+                  dataType="System.Boolean"
+                  description="Indicates whether the values supplied for identity columns will be copied to the destination. If false, values for identity columns will be auto-generated at the destination. Applies only if fast load is turned on."
+                  name="FastLoadKeepIdentity">false</property>
+                <property
+                  dataType="System.Boolean"
+                  description="Indicates whether the columns containing null will have null inserted in the destination. If false, columns containing null will have their default values inserted at the destination. Applies only if fast load is turned on."
+                  name="FastLoadKeepNulls">false</property>
+                <property
+                  dataType="System.String"
+                  description="Specifies options to be used with fast load.  Applies only if fast load is turned on."
+                  name="FastLoadOptions"></property>
+                <property
+                  dataType="System.Int32"
+                  description="Specifies when commits are issued during data insertion.  A value of 0 specifies that one commit will be issued at the end of data insertion.  Applies only if fast load is turned on."
+                  name="FastLoadMaxInsertCommitSize">2147483647</property>
+              </properties>
+              <connections>
+                <connection
+                  refId="Package\Data Flow Task\Factoring data.Connections[OleDbConnection]"
+                  connectionManagerID="{F7199933-07ED-43D8-9977-C6DD95A6DF4E}:external"
+                  connectionManagerRefId="Project.ConnectionManagers[Excel Connection Manager]"
+                  description="The OLE DB runtime connection used to access the database."
+                  name="OleDbConnection" />
+              </connections>
+              <inputs>
+                <input
+                  refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input]"
+                  errorOrTruncationOperation="Insert"
+                  errorRowDisposition="FailComponent"
+                  hasSideEffects="true"
+                  name="Excel Destination Input">
+                  <inputColumns>
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[business_unit]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="business_unit"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[business_unit]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[business_unit]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[client_number]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="client_number"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[client_number]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[client_number]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[client_name]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="client_name"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[client_name]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[client_name]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[debtor_number]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="debtor_number"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[debtor_number]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[debtor_number]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[debtor_name]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="debtor_name"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[debtor_name]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[debtor_name]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[invoice_number]"
+                      cachedDataType="wstr"
+                      cachedLength="138"
+                      cachedName="invoice_number"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[invoice_number]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_number]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[invoice_date]"
+                      cachedDataType="dbTimeStamp"
+                      cachedName="invoice_date"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[invoice_date]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_date]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[invoice_amount]"
+                      cachedDataType="r8"
+                      cachedName="invoice_amount"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[invoice_amount]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_amount]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[invoice_balance]"
+                      cachedDataType="r8"
+                      cachedName="invoice_balance"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[invoice_balance]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[invoice_balance]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[date]"
+                      cachedDataType="dbDate"
+                      cachedName="date"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[date]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[date]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[ar_bucket]"
+                      cachedDataType="wstr"
+                      cachedLength="50"
+                      cachedName="ar_bucket"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[ar_bucket]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[ar_bucket]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[explaination]"
+                      cachedDataType="wstr"
+                      cachedLength="30"
+                      cachedName="explaination"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[explaination]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[explaination]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[Client_State]"
+                      cachedDataType="wstr"
+                      cachedLength="100"
+                      cachedName="Client_State"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Client_State]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Client_State]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[Client_ZIP]"
+                      cachedDataType="wstr"
+                      cachedLength="100"
+                      cachedName="Client_ZIP"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Client_ZIP]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Client_ZIP]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[Debtor_State]"
+                      cachedDataType="wstr"
+                      cachedLength="100"
+                      cachedName="Debtor_State"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Debtor_State]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Debtor_State]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[Debtor_ZIP]"
+                      cachedDataType="wstr"
+                      cachedLength="100"
+                      cachedName="Debtor_ZIP"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Debtor_ZIP]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Debtor_ZIP]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[Days_Due]"
+                      cachedDataType="i4"
+                      cachedName="Days_Due"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Days_Due]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Days_Due]" />
+                    <inputColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].Columns[Days_Outstanding]"
+                      cachedDataType="i4"
+                      cachedName="Days_Outstanding"
+                      externalMetadataColumnId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Days_Outstanding]"
+                      lineageId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output].Columns[Days_Outstanding]" />
+                  </inputColumns>
+                  <externalMetadataColumns
+                    isUsed="True">
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[business_unit]"
+                      dataType="wstr"
+                      length="255"
+                      name="business_unit" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[client_number]"
+                      dataType="wstr"
+                      length="255"
+                      name="client_number" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[client_name]"
+                      dataType="wstr"
+                      length="255"
+                      name="client_name" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[debtor_number]"
+                      dataType="wstr"
+                      length="255"
+                      name="debtor_number" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[debtor_name]"
+                      dataType="wstr"
+                      length="255"
+                      name="debtor_name" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[invoice_number]"
+                      dataType="wstr"
+                      length="255"
+                      name="invoice_number" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[invoice_date]"
+                      dataType="wstr"
+                      length="255"
+                      name="invoice_date" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[invoice_amount]"
+                      dataType="wstr"
+                      length="255"
+                      name="invoice_amount" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[invoice_balance]"
+                      dataType="wstr"
+                      length="255"
+                      name="invoice_balance" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[explaination]"
+                      dataType="wstr"
+                      length="255"
+                      name="explaination" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[date]"
+                      dataType="wstr"
+                      length="255"
+                      name="date" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[ar_bucket]"
+                      dataType="wstr"
+                      length="255"
+                      name="ar_bucket" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Client_State]"
+                      dataType="wstr"
+                      length="255"
+                      name="Client_State" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Client_ZIP]"
+                      dataType="wstr"
+                      length="255"
+                      name="Client_ZIP" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Debtor_State]"
+                      dataType="wstr"
+                      length="255"
+                      name="Debtor_State" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Debtor_ZIP]"
+                      dataType="wstr"
+                      length="255"
+                      name="Debtor_ZIP" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Days_Due]"
+                      dataType="wstr"
+                      length="255"
+                      name="Days_Due" />
+                    <externalMetadataColumn
+                      refId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input].ExternalColumns[Days_Outstanding]"
+                      dataType="wstr"
+                      length="255"
+                      name="Days_Outstanding" />
+                  </externalMetadataColumns>
+                </input>
+              </inputs>
+              <outputs>
+                <output
+                  refId="Package\Data Flow Task\Factoring data.Outputs[Excel Destination Error Output]"
+                  exclusionGroup="1"
+                  isErrorOut="true"
+                  name="Excel Destination Error Output"
+                  synchronousInputId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input]">
+                  <outputColumns>
+                    <outputColumn
+                      refId="Package\Data Flow Task\Factoring data.Outputs[Excel Destination Error Output].Columns[ErrorCode]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\Factoring data.Outputs[Excel Destination Error Output].Columns[ErrorCode]"
+                      name="ErrorCode"
+                      specialFlags="1" />
+                    <outputColumn
+                      refId="Package\Data Flow Task\Factoring data.Outputs[Excel Destination Error Output].Columns[ErrorColumn]"
+                      dataType="i4"
+                      lineageId="Package\Data Flow Task\Factoring data.Outputs[Excel Destination Error Output].Columns[ErrorColumn]"
+                      name="ErrorColumn"
+                      specialFlags="2" />
+                  </outputColumns>
+                  <externalMetadataColumns />
+                </output>
+              </outputs>
+            </component>
+          </components>
+          <paths>
+            <path
+              refId="Package\Data Flow Task.Paths[CapitalFunding]"
+              endId="Package\Data Flow Task\Capital Funding data.Inputs[Excel Destination Input]"
+              name="CapitalFunding"
+              startId="Package\Data Flow Task\Conditional Split.Outputs[CapitalFunding]" />
+            <path
+              refId="Package\Data Flow Task.Paths[Factoring]"
+              endId="Package\Data Flow Task\Factoring data.Inputs[Excel Destination Input]"
+              name="Factoring"
+              startId="Package\Data Flow Task\Conditional Split.Outputs[Factoring]" />
+            <path
+              refId="Package\Data Flow Task.Paths[OLE DB Source Output]"
+              endId="Package\Data Flow Task\Conditional Split.Inputs[Conditional Split Input]"
+              name="OLE DB Source Output"
+              startId="Package\Data Flow Task\AR_summary_raw.Outputs[OLE DB Source Output]" />
+          </paths>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable
+      DTS:refId="Package\Save Excel File"
+      DTS:CreationName="Microsoft.ScriptTask"
+      DTS:Description="Script Task"
+      DTS:DTSID="{71E89D01-43A1-41CC-B439-1E7C1437665E}"
+      DTS:ExecutableType="Microsoft.ScriptTask"
+      DTS:LocaleID="-1"
+      DTS:ObjectName="Save Excel File"
+      DTS:ThreadHint="0">
+      <DTS:Variables />
+      <DTS:ObjectData>
+        <ScriptProject
+          Name="ST_c85160234d7544fe9ded11da03f98ca4"
+          VSTAMajorVersion="15"
+          VSTAMinorVersion="0"
+          Language="CSharp" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:EventHandlers>
+    <DTS:EventHandler
+      DTS:refId="Package.EventHandlers[OnError]"
+      DTS:CreationName="OnError"
+      DTS:DTSID="{1EB8BB53-FD17-42AC-85B5-E8347E7F35BC}"
+      DTS:EventID="487838648"
+      DTS:EventName="OnError"
+      DTS:LocaleID="-1">
+      <DTS:Variables>
+        <DTS:Variable
+          DTS:CreationName=""
+          DTS:Description="The propagate property of the event"
+          DTS:DTSID="{8857C550-230A-4A50-B5CC-85E31E6D4662}"
+          DTS:IncludeInDebugDump="6789"
+          DTS:Namespace="System"
+          DTS:ObjectName="Propagate">
+          <DTS:VariableValue
+            DTS:DataType="11">-1</DTS:VariableValue>
+        </DTS:Variable>
+      </DTS:Variables>
+      <DTS:Executables>
+        <DTS:Executable
+          DTS:refId="Package.EventHandlers[OnError]\Send Mail Task"
+          DTS:CreationName="Microsoft.SendMailTask"
+          DTS:Description="Send Mail Task"
+          DTS:DTSID="{15AD9E59-C211-48F3-8AA5-93DED5DEE34F}"
+          DTS:ExecutableType="Microsoft.SendMailTask"
+          DTS:LocaleID="-1"
+          DTS:ObjectName="Send Mail Task"
+          DTS:TaskContact="Send Mail Task; Microsoft Corporation; SQL Server 2019; © 2019 Microsoft Corporation; All Rights Reserved;http://www.microsoft.com/sql/support/default.asp;1">
+          <DTS:Variables />
+          <DTS:ObjectData>
+            <SendMailTask:SendMailTaskData
+              SendMailTask:SMTPServer="{84BFF4B7-9437-4EA6-B690-B3413462C714}"
+              SendMailTask:From="BIADepartment@tbsokc.com"
+              SendMailTask:To="BIADepartment@tbsokc.com"
+              SendMailTask:Subject="Daily_Reporting_AR FAILURE"
+              SendMailTask:Priority="High"
+              SendMailTask:MessageSource="Daily_Reporting_AR job failure" xmlns:SendMailTask="www.microsoft.com/sqlserver/dts/tasks/sendmailtask" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+  <DTS:DesignTimeProperties><![CDATA[<?xml version="1.0"?>
+<!--This CDATA section contains the layout information of the package. The section includes information such as (x,y) coordinates, width, and height.-->
+<!--If you manually edit this section and make a mistake, you can delete it. -->
+<!--The package will still be able to load normally but the previous layout information will be lost and the designer will automatically re-arrange the elements on the design surface.-->
+<Objects
+  Version="8">
+  <!--Each node below will contain properties that do not affect runtime behavior.-->
+  <Package
+    design-time-name="Package">
+    <LayoutInfo>
+      <GraphLayout
+        Capacity="4" xmlns="clr-namespace:Microsoft.SqlServer.IntegrationServices.Designer.Model.Serialization;assembly=Microsoft.SqlServer.IntegrationServices.Graph">
+        <NodeLayout
+          Size="154.857142857143,42.2857142857143"
+          Id="Package\Data Flow Task"
+          TopLeft="367.777787520562,54.9545448589916" />
+        <NodeLayout
+          Size="154.285714285715,42.2857142857143"
+          Id="Package\Save Excel File"
+          TopLeft="385.000010199017,179.045452605102" />
+      </GraphLayout>
+    </LayoutInfo>
+  </Package>
+  <TaskHost
+    design-time-name="Package\Data Flow Task">
+    <LayoutInfo>
+      <GraphLayout
+        Capacity="8" xmlns="clr-namespace:Microsoft.SqlServer.IntegrationServices.Designer.Model.Serialization;assembly=Microsoft.SqlServer.IntegrationServices.Graph" xmlns:mssgle="clr-namespace:Microsoft.SqlServer.Graph.LayoutEngine;assembly=Microsoft.SqlServer.Graph" xmlns:assembly="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:mssgm="clr-namespace:Microsoft.SqlServer.Graph.Model;assembly=Microsoft.SqlServer.Graph">
+        <NodeLayout
+          Size="158.285714285715,42.2857142857143"
+          Id="Package\Data Flow Task\Conditional Split"
+          TopLeft="135.976188180308,121.909089647541" />
+        <NodeLayout
+          Size="148.571428571429,42.2857142857143"
+          Id="Package\Data Flow Task\Factoring data"
+          TopLeft="11.6269727505912,230.045452112009" />
+        <NodeLayout
+          Size="168.571428571429,42.2857142857143"
+          Id="Package\Data Flow Task\AR_summary_raw"
+          TopLeft="136.055559014097,6.68181816901043" />
+        <NodeLayout
+          Size="179.428571428572,42.2857142857143"
+          Id="Package\Data Flow Task\Capital Funding data"
+          TopLeft="252.777784474102,229.863633872556" />
+        <EdgeLayout
+          Id="Package\Data Flow Task.Paths[CapitalFunding]"
+          TopLeft="240.166664370784,164.194803933256">
+          <EdgeLayout.Curve>
+            <mssgle:Curve
+              StartConnector="{assembly:Null}"
+              EndConnector="102.325405817604,65.6688299393006"
+              Start="0,0"
+              End="102.325405817604,58.1688299393006">
+              <mssgle:Curve.Segments>
+                <mssgle:SegmentCollection
+                  Capacity="5">
+                  <mssgle:LineSegment
+                    End="0,22.6618265943694" />
+                  <mssgle:CubicBezierSegment
+                    Point1="0,22.6618265943694"
+                    Point2="0,26.6618265943694"
+                    Point3="4,26.6618265943694" />
+                  <mssgle:LineSegment
+                    End="98.3254058176039,26.6618265943694" />
+                  <mssgle:CubicBezierSegment
+                    Point1="98.3254058176039,26.6618265943694"
+                    Point2="102.325405817604,26.6618265943694"
+                    Point3="102.325405817604,30.6618265943694" />
+                  <mssgle:LineSegment
+                    End="102.325405817604,58.1688299393006" />
+                </mssgle:SegmentCollection>
+              </mssgle:Curve.Segments>
+            </mssgle:Curve>
+          </EdgeLayout.Curve>
+          <EdgeLayout.Labels>
+            <mssgm:EdgeLabel
+              BoundingBox="18.027195096302,31.6618265943694,66.271015625,11.6630859375"
+              RelativePosition="Any" />
+          </EdgeLayout.Labels>
+        </EdgeLayout>
+        <EdgeLayout
+          Id="Package\Data Flow Task.Paths[OLE DB Source Output]"
+          TopLeft="217.730159311488,48.9675324547247">
+          <EdgeLayout.Curve>
+            <mssgle:Curve
+              StartConnector="{assembly:Null}"
+              EndConnector="0,72.9415571928165"
+              Start="0,0"
+              End="0,65.4415571928165">
+              <mssgle:Curve.Segments>
+                <mssgle:SegmentCollection
+                  Capacity="5">
+                  <mssgle:LineSegment
+                    End="0,65.4415571928165" />
+                </mssgle:SegmentCollection>
+              </mssgle:Curve.Segments>
+            </mssgle:Curve>
+          </EdgeLayout.Curve>
+          <EdgeLayout.Labels>
+            <EdgeLabelCollection />
+          </EdgeLayout.Labels>
+        </EdgeLayout>
+        <EdgeLayout
+          Id="Package\Data Flow Task.Paths[Factoring]"
+          TopLeft="190.071426275546,164.194803933255">
+          <EdgeLayout.Curve>
+            <mssgle:Curve
+              StartConnector="{assembly:Null}"
+              EndConnector="-104.158739239241,65.8506481787537"
+              Start="0,0"
+              End="-104.158739239241,58.3506481787537">
+              <mssgle:Curve.Segments>
+                <mssgle:SegmentCollection
+                  Capacity="5">
+                  <mssgle:LineSegment
+                    End="0,22.7356455793653" />
+                  <mssgle:CubicBezierSegment
+                    Point1="0,22.7356455793653"
+                    Point2="0,26.7356455793653"
+                    Point3="-4,26.7356455793653" />
+                  <mssgle:LineSegment
+                    End="-100.158739239241,26.7356455793653" />
+                  <mssgle:CubicBezierSegment
+                    Point1="-100.158739239241,26.7356455793653"
+                    Point2="-104.158739239241,26.7356455793653"
+                    Point3="-104.158739239241,30.7356455793653" />
+                  <mssgle:LineSegment
+                    End="-104.158739239241,58.3506481787537" />
+                </mssgle:SegmentCollection>
+              </mssgle:Curve.Segments>
+            </mssgle:Curve>
+          </EdgeLayout.Curve>
+          <EdgeLayout.Labels>
+            <mssgm:EdgeLabel
+              BoundingBox="-72.7973579008703,31.7356455793653,41.4359765625,11.384765625"
+              RelativePosition="Any" />
+          </EdgeLayout.Labels>
+        </EdgeLayout>
+      </GraphLayout>
+    </LayoutInfo>
+  </TaskHost>
+  <PipelineComponentMetadata
+    design-time-name="Package\Data Flow Task\Factoring data">
+    <Properties>
+      <Property>
+        <Name>DataSourceViewID</Name>
+      </Property>
+      <Property>
+        <Name>TableInfoObjectType</Name>
+        <Value
+          type="q2:string">Table</Value>
+      </Property>
+    </Properties>
+  </PipelineComponentMetadata>
+  <PipelineComponentMetadata
+    design-time-name="Package\Data Flow Task\AR_summary_raw">
+    <Properties>
+      <Property>
+        <Name>DataSourceViewID</Name>
+      </Property>
+    </Properties>
+  </PipelineComponentMetadata>
+  <PipelineComponentMetadata
+    design-time-name="Package\Data Flow Task\Capital Funding data">
+    <Properties>
+      <Property>
+        <Name>DataSourceViewID</Name>
+      </Property>
+      <Property>
+        <Name>TableInfoObjectType</Name>
+        <Value
+          type="q2:string">Table</Value>
+      </Property>
+    </Properties>
+  </PipelineComponentMetadata>
+  <DtsEventHandler
+    design-time-name="Package.EventHandlers[OnError]">
+    <LayoutInfo>
+      <GraphLayout
+        Capacity="4" xmlns="clr-namespace:Microsoft.SqlServer.IntegrationServices.Designer.Model.Serialization;assembly=Microsoft.SqlServer.IntegrationServices.Graph">
+        <NodeLayout
+          Size="154.285714285715,42.2857142857143"
+          Id="Package.EventHandlers[OnError]\Send Mail Task"
+          TopLeft="1104,316" />
+      </GraphLayout>
+    </LayoutInfo>
+  </DtsEventHandler>
+</Objects>]]></DTS:DesignTimeProperties>
+</DTS:Executable>

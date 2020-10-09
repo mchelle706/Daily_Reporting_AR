@@ -1,0 +1,14 @@
+﻿<?xml version="1.0"?>
+<DTS:ConnectionManager xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:ObjectName="tbs-cl-rds-sql-01.choziwohin32.us-east-1.rds.amazonaws.com.EDWIntegration_DEV.michelle.rutz"
+  DTS:DTSID="{177F80BE-2562-4EFC-B630-E432050892B5}"
+  DTS:CreationName="OLEDB">
+  <DTS:ObjectData>
+    <DTS:ConnectionManager
+      DTS:ConnectionString="Data Source=tbs-cl-rds-sql-01.choziwohin32.us-east-1.rds.amazonaws.com;User ID=michelle.rutz;Initial Catalog=EDWIntegration_DEV;Provider=SQLNCLI11.1;Persist Security Info=True;Auto Translate=False;">
+      <DTS:Password
+        DTS:Name="Password"
+        Sensitive="1">AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAwCG76gDm4EW8peE5j7LW9AAAAAACAAAAAAADZgAAwAAAABAAAAABtPzcl6fcoMTYYi56JkA6AAAAAASAAACgAAAAEAAAAEQAjYreXBwkc45ILNWJtBp4AAAA9HycnwYJWuprcDTGOVY8KIkpXjoCD+yVOHQB+cWPw+OauAgHtklUqd9PpLrjHY6CgZhOvgmLmuid+ND3KwCFXN793lOZUTUv4EyA1Mv6VLkmeHFPzUKagvs+s3Fi/RusUMUw/BTO7vqCH0Hbd7gFwaeWo++dNP4xFAAAAAzh0/xVablmyStQLKz3ys8VLRPA</DTS:Password>
+    </DTS:ConnectionManager>
+  </DTS:ObjectData>
+</DTS:ConnectionManager>
